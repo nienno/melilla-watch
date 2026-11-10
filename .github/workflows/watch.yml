@@ -1,0 +1,27 @@
+name: watch
+on:
+  schedule:
+    - cron: "*/10 * * * *"   # GitHub may delay scheduled runs by a few minutes
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency: watch
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: python3 check.py
+        env:
+          NTFY_TOPIC: ${{ secrets.NTFY_TOPIC }}
+      - name: Commit state if changed
+        run: |
+          git config user.name "melilla-watch"
+          git config user.email "actions@users.noreply.github.com"
+          git add state.txt
+          git diff --cached --quiet || { git commit -m "page changed $(date -u +%FT%TZ)"; git push; exit 0; }
+          # GitHub disables cron workflows after 60 days without repo activity; keep it alive.
+          if [ $(( $(date +%s) - $(git log -1 --format=%ct) )) -gt $((50*86400)) ]; then
+            git commit --allow-empty -m "keepalive"; git push
+          fi
